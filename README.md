@@ -1,21 +1,23 @@
 # Voxtype Wave OSD
 
-A GNOME Shell extension that shows a small floating microphone waveform while
-[voxtype][voxtype] is recording, similar to the dictation overlay in Wispr Flow.
+A GNOME Shell extension that puts a small waveform on screen while
+[voxtype][voxtype] is recording. Wispr Flow has an overlay like this, and once
+you're used to it, dictating without one feels like talking into a phone that
+might be on mute.
 
 ![The waveform floating near the bottom of the screen while dictating](screenshot.png)
 
-voxtype ships its own on-screen visualizer (`voxtype-osd`), but it needs the
-Wayland layer-shell protocol, which GNOME does not implement. On GNOME only the
-shell itself can draw above other windows, hence an extension.
+voxtype comes with its own visualizer (`voxtype-osd`). It needs the Wayland
+layer-shell protocol, though, and GNOME doesn't implement that. On GNOME only
+the shell itself gets to draw on top of other windows. So this is an extension.
 
 ## Requirements
 
 - GNOME Shell 50
-- voxtype 1.0 with its daemon running (`systemctl --user enable --now voxtype`)
+- voxtype 1.0, with the daemon running (`systemctl --user enable --now voxtype`)
 
-The voxtype `[osd]` setting does not need to be enabled. The daemon always opens
-its audio-level socket; this extension only reads from it.
+You can leave voxtype's `[osd]` setting off. The daemon opens its audio-level
+socket either way, and that socket is all this extension reads.
 
 ## Install
 
@@ -23,8 +25,8 @@ its audio-level socket; this extension only reads from it.
 make install     # symlinks this checkout into ~/.local/share/gnome-shell/extensions
 ```
 
-GNOME Shell only scans for extensions at startup. On Wayland it cannot be
-restarted in place, so **log out and back in**, then:
+GNOME Shell looks for extensions once, at startup, and on Wayland you can't
+restart it in place. Log out and back in, then:
 
 ```bash
 make enable
@@ -32,26 +34,26 @@ make enable
 
 ## Usage
 
-Start a voxtype recording with your hotkey. A dark rounded box with a red dot
-and a scrolling waveform fades in near the bottom of the primary monitor, and
-fades out again once recording stops.
+Press your voxtype hotkey. A red dot and a scrolling waveform fade in near the
+bottom of the primary monitor. When the recording stops they fade out again.
 
-The overlay sits in the same layer as GNOME's volume OSD: it stays visible above
-fullscreen windows, never takes keyboard focus, and lets clicks pass through.
+It lives in the same layer as GNOME's volume popup, so it stays visible over
+fullscreen windows. Your keyboard focus stays where it was, and clicks go
+straight through to whatever is underneath.
 
 ## How it works
 
-- **Audio levels** come from `$XDG_RUNTIME_DIR/voxtype/audio.sock`. The voxtype
-  daemon writes one 16-byte frame (`u32 seq, f32 min, f32 max, f32 peak_dbfs`,
-  native byte order) every 10 ms, and only while recording.
-- **Recording state** is inferred from those frames: the overlay appears on the
-  first frame and fades out after 300 ms without one. No polling of
-  `voxtype status` and no subprocesses.
-- **Reconnecting**: when the daemon is not running or restarts, the extension
-  retries every 2 seconds.
-- **Drawing**: two frames become one bar (20 ms). Bar height uses a power curve
-  so quiet speech stays visible, and both ends of the wave fade out so it looks
-  endless.
+- **Audio levels** come from `$XDG_RUNTIME_DIR/voxtype/audio.sock`. The daemon
+  writes a 16-byte frame (`u32 seq, f32 min, f32 max, f32 peak_dbfs`, native
+  byte order) every 10 ms, and only while it's recording.
+- **Recording state** is guessed from those frames. The first frame shows the
+  overlay; 300 ms of silence on the socket hides it. Nothing polls
+  `voxtype status` and no subprocesses get spawned.
+- **Reconnecting** happens every 2 seconds while the daemon is down or
+  restarting.
+- **Drawing** turns every two frames into one bar, so 20 ms per bar. Heights go
+  through a power curve because quiet speech would otherwise barely register.
+  Both ends of the wave fade out, which makes it look like it never ends.
 
 ## Development
 
@@ -64,16 +66,20 @@ make nested   # nested devkit shell (GNOME 49+: needs mutter-dev-bin on Ubuntu)
 make pack     # distributable zip
 ```
 
-`make nested` starts a nested GNOME Shell via the Mutter Development Kit
-(`gnome-shell --devkit --wayland`) and enables the extension inside it. It uses
-the in-memory GSettings backend so enabling it there does not touch your real
-session. Start a voxtype recording to see the overlay in the nested window. The
-target stubs `org.freedesktop.secrets` and disables portals so
-xdg-desktop-portal does not sit for ~25s waiting for gnome-keyring.
+`make nested` starts a nested GNOME Shell through the Mutter Development Kit
+(`gnome-shell --devkit --wayland`) and enables the extension in it. It runs with
+the in-memory GSettings backend, because the nested shell shares dconf with
+your real session and would otherwise enable the extension there too. Record
+something with voxtype and the overlay shows up in the nested window.
 
-The test suite (`tests/smoke.js`) runs under plain `gjs`. It covers frame
-decoding, bar heights, the edge fade, and the socket client against a fake
-daemon on a temporary socket.
+The target also stubs out `org.freedesktop.secrets` and turns portals off.
+Without that, xdg-desktop-portal sits for about 25 seconds waiting for a
+gnome-keyring that never comes.
+
+`tests/smoke.js` runs under plain `gjs`. Most of it checks the pure logic in
+`lib/`. The interesting part spins up a fake voxtype daemon on a temporary
+socket and checks that frames split across reads come out whole, and that the
+client reconnects and shuts down cleanly.
 
 ### Layout
 
@@ -84,28 +90,34 @@ daemon on a temporary socket.
 | `lib/levelSocket.js` | shared | Socket client with reconnect |
 | `lib/frames.js` | shared | Frame decoder |
 | `lib/wave.js` | shared | Bar heights and edge fade |
-| `stylesheet.css` | shell | Overlay background |
+| `stylesheet.css` | shell | Overlay background (not rendering yet, see Caveats) |
 | `tests/` | — | Headless gjs checks |
 
-`lib/` must never import `St`, `Clutter`, `Gtk`, `Gdk` or `Adw`.
+Nothing in `lib/` may import `St`, `Clutter`, `Gtk`, `Gdk` or `Adw`. That's
+what lets the tests run without a shell.
 
 ### Agentic development
 
-`best-practices.md` is the upstream GNOME/EGO guidance. Cursor rules in
-`.cursor/rules/` encode conventions and verification. Run `make check` before
-reporting work done.
+`best-practices.md` is GNOME's own guidance for extension code, the same
+document EGO reviewers work from. The rules in `.cursor/rules/` spell out this
+repo's conventions and how to verify a change. Run `make check` before calling
+anything done.
 
 ## Caveats
 
-- Only the primary monitor shows the overlay.
-- Size, position and colours are constants in `shell/waveOverlay.js` and
-  `stylesheet.css`; there are no preferences.
-- The overlay cannot tell "recording" from "transcribing": it fades out as soon
-  as voxtype stops sending audio levels.
+- The dark rounded background from `stylesheet.css` doesn't show up yet. The
+  bars are drawn straight onto whatever is behind them, which looks fine on a
+  dark wallpaper and gets hard to read over a bright window.
+- It only appears on the primary monitor.
+- There are no preferences. Size, position and colours are constants in
+  `shell/waveOverlay.js` and `stylesheet.css`.
+- Recording and transcribing look the same from here. The overlay fades out the
+  moment voxtype stops sending audio levels, which can be a little before the
+  text appears.
 
 ## License
 
-This program is free software under the [GNU General Public License v2.0 or
-later](LICENSE) (`GPL-2.0-or-later`).
+Free software under the [GNU General Public License v2.0 or later](LICENSE)
+(`GPL-2.0-or-later`).
 
 [voxtype]: https://github.com/peteonrails/voxtype
