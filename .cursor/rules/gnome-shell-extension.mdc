@@ -1,0 +1,59 @@
+---
+description: Conventions for this GNOME Shell 50 extension
+alwaysApply: true
+---
+
+# GNOME Shell extension conventions
+
+`best-practices.md` in the repository root is the upstream GNOME/EGO guidance for
+AI-generated extensions and overrides general JavaScript habits. Read it before
+changing extension code.
+
+## Target exactly GNOME Shell 50
+
+No compatibility shims, no `typeof x === 'function'` guards, no optional chaining
+on values that cannot be null. Use `TextDecoder`, `console.error` and ESM
+directly.
+
+## Process isolation
+
+- `extension.js` and `shell/` run in GNOME Shell.
+- `lib/` is shell-independent and must **never** import `St`, `Clutter`, `Gtk`,
+  `Gdk` or `Adw`, so the test suite can run it under plain `gjs`.
+
+Keep `extension.js` limited to `enable()`/`disable()`, kept adjacent, with new
+logic going into a module.
+
+## Resource ownership
+
+A class cleans up whatever it created, in `destroy()`, in this order: GLib
+sources, signal handlers, child references, then `super.destroy()` last. Never
+guard with a `this._destroyed` flag; drop the reference after destroying.
+
+```js
+destroy() {
+    if (this._tickId) {
+        GLib.Source.remove(this._tickId);
+        this._tickId = 0;
+    }
+    Main.layoutManager.disconnect(this._monitorsChangedId);
+    super.destroy();
+}
+```
+
+`LevelSocket` owns its `Gio.Cancellable` and reconnect timeout; cancelling ends
+the read loop, which then closes the connection itself (closing a stream with a
+pending read throws).
+
+## voxtype socket protocol
+
+Frames are 16 bytes in native byte order: `u32 seq, f32 min, f32 max,
+f32 peak_dbfs`, at 100 Hz, only while recording. The source of truth is
+`src/audio/levels.rs` in voxtype. Reads can split a frame; `FrameDecoder`
+keeps the remainder.
+
+## Comments
+
+Only document constraints the code cannot express, such as why recording state
+is inferred from frame gaps or why `trackFullscreen` is false. No line-by-line
+narration.

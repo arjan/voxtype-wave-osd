@@ -1,0 +1,36 @@
+---
+description: How to verify changes to this extension
+alwaysApply: true
+---
+
+# Verifying changes
+
+Run `make check` (lints, runs the headless tests) before reporting work as done.
+Add a case to `tests/smoke.js` for any new logic in `lib/`; it runs under plain
+`gjs` against a fake daemon on a temporary socket, so it must stay free of side
+effects and never connect to the real voxtype socket.
+
+## You cannot restart GNOME Shell
+
+The session is Wayland, so the shell cannot be restarted in place and
+`gnome-extensions list` will not show a newly linked extension until the user
+logs out and back in. Never claim the extension was loaded or enabled without
+evidence. To exercise shell-side code, use `make nested` (GNOME 49+:
+`gnome-shell --devkit --wayland`; requires `mutter-dev-bin` on Ubuntu), and
+tell the user when a logout is genuinely required.
+
+`make nested` uses `GSETTINGS_BACKEND=memory`. Do not drop that: the nested
+shell shares dconf with the real session, so enabling the extension there would
+otherwise enable it in the real session too.
+
+`make logs` follows `gnome-shell` output for runtime errors.
+
+## Do not disturb the user's voxtype
+
+The user dictates with voxtype while you work. Never restart, stop or
+reconfigure the voxtype daemon to test this extension; the nested shell reads
+the same socket, so a real recording is enough to see the overlay.
+
+## Do not edit generated files
+
+`node_modules/` is build output and is ignored by git.
