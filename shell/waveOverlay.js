@@ -13,7 +13,9 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
+import {Mode} from '../lib/contrast.js';
 import {BarAccumulator, edgeFade} from '../lib/wave.js';
+import {detectMode, systemMode} from './backgroundMode.js';
 
 const WIDTH = 360;
 const HEIGHT = 56;
@@ -24,8 +26,9 @@ const BAR_WIDTH = 3;
 const BAR_GAP = 2;
 const BAR_ALPHA = 0.9;
 const EDGE_FADE_WIDTH = 48;
-const DOT_RADIUS = 4;
-const DOT_GAP = 12;
+const DOT_RADIUS = 5;
+const DOT_BORDER_WIDTH = 1.5;
+const DOT_GAP = 14;
 
 const FRAMES_PER_BAR = 2;
 const GAIN = 3.0;
@@ -41,7 +44,6 @@ export const WaveOverlay = GObject.registerClass(
 class WaveOverlay extends St.DrawingArea {
     constructor() {
         super({
-            style_class: 'voxtype-wave-osd',
             width: WIDTH,
             height: HEIGHT,
             reactive: false,
@@ -52,6 +54,7 @@ class WaveOverlay extends St.DrawingArea {
         this._bars = new BarAccumulator({framesPerBar: FRAMES_PER_BAR, gain: GAIN, capacity: MAX_BARS});
         this._lastFrameTime = 0;
         this._tickId = 0;
+        this._mode = systemMode();
         this._monitorsChangedId = Main.layoutManager.connect('monitors-changed', () => this._reposition());
         this._reposition();
     }
@@ -84,9 +87,14 @@ class WaveOverlay extends St.DrawingArea {
         });
     }
 
-    _fadeIn() {
+    async _fadeIn() {
         this.remove_all_transitions();
+        this.hide();
         this._bars.clear();
+        this._mode = await detectMode(this.x, this.y, WIDTH, HEIGHT);
+        /* The recording may have ended, or the extension been disabled, while sampling. */
+        if (!this._tickId)
+            return;
         this.show();
         this.ease({opacity: 255, duration: FADE_IN_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
     }
@@ -112,9 +120,14 @@ class WaveOverlay extends St.DrawingArea {
         const [width, height] = this.get_surface_size();
         const middle = height / 2;
 
-        cr.setSourceRGBA(0.93, 0.26, 0.26, 1);
+        const shade = this._mode === Mode.DARK ? 1 : 0;
+
         cr.arc(PADDING, middle, DOT_RADIUS, 0, 2 * Math.PI);
-        cr.fill();
+        cr.setSourceRGBA(0.93, 0.26, 0.26, 1);
+        cr.fillPreserve();
+        cr.setLineWidth(DOT_BORDER_WIDTH);
+        cr.setSourceRGBA(shade, shade, shade, BAR_ALPHA);
+        cr.stroke();
 
         const waveStart = PADDING + DOT_GAP;
         const waveEnd = width - PADDING;
@@ -129,8 +142,8 @@ class WaveOverlay extends St.DrawingArea {
             if (alpha <= 0)
                 return;
             const halfHeight = Math.max(1, level * maxHalfHeight);
-            cr.setSourceRGBA(1, 1, 1, alpha);
             cr.rectangle(x, middle - halfHeight, BAR_WIDTH, halfHeight * 2);
+            cr.setSourceRGBA(shade, shade, shade, alpha);
             cr.fill();
         });
 

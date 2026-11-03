@@ -57,3 +57,12 @@ keeps the remainder.
 Only document constraints the code cannot express, such as why recording state
 is inferred from frame gaps or why `trackFullscreen` is false. No line-by-line
 narration.
+
+## Screen sampling
+
+`shell/backgroundMode.js` reads pixels behind the overlay with
+`Shell.Screenshot.pick_color` to choose light or dark bars. Keep it to a few
+pixels, once per recording, reduced to brightness on the spot: never store,
+log or send pixel data. It must run while the overlay is still hidden, or it
+samples itself. Each parallel pick needs its own `Shell.Screenshot`, which
+handles one task at a time.

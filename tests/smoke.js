@@ -19,6 +19,7 @@ const PROJECT = GLib.path_get_dirname(HERE);
 const {FRAME_BYTES, FrameDecoder} = await import(`file://${PROJECT}/lib/frames.js`);
 const {BarAccumulator, barHeight, edgeFade} = await import(`file://${PROJECT}/lib/wave.js`);
 const {LevelSocket, defaultSocketPath} = await import(`file://${PROJECT}/lib/levelSocket.js`);
+const {Mode, chooseMode, luminance} = await import(`file://${PROJECT}/lib/contrast.js`);
 
 let failures = 0;
 
@@ -128,6 +129,16 @@ check('rises monotonically through the fade',
     [2, 6, 10, 14, 18].map(x => edgeFade(x, 0, 100, 20)).every((value, i, all) => i === 0 || value > all[i - 1]),
     true);
 check('outside the range stays invisible', edgeFade(-5, 0, 100, 20), 0);
+
+print('light and dark mode');
+check('black has zero luminance', luminance(0, 0, 0), 0);
+check('white has full luminance', Math.abs(luminance(255, 255, 255) - 1) < 1e-9, true);
+check('green counts for more than blue', luminance(0, 255, 0) > luminance(0, 0, 255), true);
+check('dark background picks dark mode', chooseMode([0.21, 0.2, 0.22], Mode.LIGHT), Mode.DARK);
+check('light background picks light mode', chooseMode([0.96, 1, 0.98], Mode.DARK), Mode.LIGHT);
+check('mid-grey falls back to the system mode', chooseMode([0.5, 0.5], Mode.DARK), Mode.DARK);
+check('mixed light and dark falls back to the system mode', chooseMode([0.05, 0.95], Mode.LIGHT), Mode.LIGHT);
+check('no samples fall back to the system mode', chooseMode([], Mode.DARK), Mode.DARK);
 
 print('socket path');
 check('lives in the user runtime dir',

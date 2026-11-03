@@ -37,6 +37,9 @@ make enable
 Press your voxtype hotkey. A red dot and a scrolling waveform fade in near the
 bottom of the primary monitor. When the recording stops they fade out again.
 
+The bars are white over dark content and black over light content. The dot gets
+a ring in the same colour.
+
 It lives in the same layer as GNOME's volume popup, so it stays visible over
 fullscreen windows. Your keyboard focus stays where it was, and clicks go
 straight through to whatever is underneath.
@@ -54,6 +57,12 @@ straight through to whatever is underneath.
 - **Drawing** turns every two frames into one bar, so 20 ms per bar. Heights go
   through a power curve because quiet speech would otherwise barely register.
   Both ends of the wave fade out, which makes it look like it never ends.
+- **Light or dark** gets decided once per recording, right before the overlay
+  appears. It reads ten pixels where it's about to draw, with
+  `Shell.Screenshot.pick_color`, and averages their brightness. If that lands
+  in the grey middle, or the samples disagree wildly (half a white window, half
+  a dark one), it goes with your system colour scheme. The pixels are only
+  turned into a brightness number; nothing is stored or sent anywhere.
 
 ## Development
 
@@ -87,10 +96,11 @@ client reconnects and shuts down cleanly.
 | --- | --- | --- |
 | `extension.js` | shell | Entry point; wires the socket to the overlay |
 | `shell/waveOverlay.js` | shell | Floating `St.DrawingArea`, show/hide and drawing |
+| `shell/backgroundMode.js` | shell | Samples the screen behind the overlay |
 | `lib/levelSocket.js` | shared | Socket client with reconnect |
 | `lib/frames.js` | shared | Frame decoder |
 | `lib/wave.js` | shared | Bar heights and edge fade |
-| `stylesheet.css` | shell | Overlay background (not rendering yet, see Caveats) |
+| `lib/contrast.js` | shared | Light/dark decision from brightness samples |
 | `tests/` | — | Headless gjs checks |
 
 Nothing in `lib/` may import `St`, `Clutter`, `Gtk`, `Gdk` or `Adw`. That's
@@ -105,12 +115,12 @@ anything done.
 
 ## Caveats
 
-- The dark rounded background from `stylesheet.css` doesn't show up yet. The
-  bars are drawn straight onto whatever is behind them, which looks fine on a
-  dark wallpaper and gets hard to read over a bright window.
+- The light/dark choice is made once, when recording starts. Scroll a white page
+  under a dark terminal mid-sentence and the bars keep the old colour until the
+  next recording.
 - It only appears on the primary monitor.
 - There are no preferences. Size, position and colours are constants in
-  `shell/waveOverlay.js` and `stylesheet.css`.
+  `shell/waveOverlay.js`.
 - Recording and transcribing look the same from here. The overlay fades out the
   moment voxtype stops sending audio levels, which can be a little before the
   text appears.
