@@ -65,4 +65,13 @@ narration.
 pixels, once per recording, reduced to brightness on the spot: never store,
 log or send pixel data. It must run while the overlay is still hidden, or it
 samples itself. Each parallel pick needs its own `Shell.Screenshot`, which
-handles one task at a time.
+handles one task at a time. `detectMode` must never reject and is capped by a
+timeout: the overlay waits on it, and a pick that never completes would keep
+it hidden for good.
+
+## Stop detection
+
+`lib/stopDetector.js` reads voxtype's post-stop silence pump (zeros at
+-120 dBFS, sequence restarting at 0) from `spawn_silence_pump` in
+`src/audio/levels.rs`. It is not a documented protocol; if voxtype changes it,
+the overlay falls back to hiding when frames stop.

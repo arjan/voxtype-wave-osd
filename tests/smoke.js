@@ -20,6 +20,7 @@ const {FRAME_BYTES, FrameDecoder} = await import(`file://${PROJECT}/lib/frames.j
 const {BarAccumulator, barHeight, edgeFade} = await import(`file://${PROJECT}/lib/wave.js`);
 const {LevelSocket, defaultSocketPath} = await import(`file://${PROJECT}/lib/levelSocket.js`);
 const {Mode, chooseMode, luminance} = await import(`file://${PROJECT}/lib/contrast.js`);
+const {StopDetector} = await import(`file://${PROJECT}/lib/stopDetector.js`);
 
 let failures = 0;
 
@@ -139,6 +140,21 @@ check('light background picks light mode', chooseMode([0.96, 1, 0.98], Mode.DARK
 check('mid-grey falls back to the system mode', chooseMode([0.5, 0.5], Mode.DARK), Mode.DARK);
 check('mixed light and dark falls back to the system mode', chooseMode([0.05, 0.95], Mode.LIGHT), Mode.LIGHT);
 check('no samples fall back to the system mode', chooseMode([], Mode.DARK), Mode.DARK);
+
+print('stop detection');
+{
+    const detector = new StopDetector();
+    const speech = seq => ({seq, min: -0.2, max: 0.3, peakDbfs: -10});
+    const silence = seq => ({seq, min: 0, max: 0, peakDbfs: -120});
+
+    check('speech is not stopping', [0, 1, 2].map(seq => detector.push(speech(seq))), [false, false, false]);
+    check('a muted mic that keeps counting is not stopping',
+        [3, 4, 5].map(seq => detector.push(silence(seq))), [false, false, false]);
+    check('the drain pump restarting at 0 is stopping', detector.push(silence(0)), true);
+    check('stays stopping while the pump counts up', detector.push(silence(1)), true);
+    detector.reset();
+    check('reset starts a fresh recording', detector.push(silence(0)), false);
+}
 
 print('socket path');
 check('lives in the user runtime dir',

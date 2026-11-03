@@ -35,7 +35,8 @@ make enable
 ## Usage
 
 Press your voxtype hotkey. A red dot and a scrolling waveform fade in near the
-bottom of the primary monitor. When the recording stops they fade out again.
+bottom of the primary monitor. When you stop the recording they fade out, even
+if voxtype is still typing the last words.
 
 The bars are white over dark content and black over light content. The dot gets
 a ring in the same colour.
@@ -52,6 +53,11 @@ straight through to whatever is underneath.
 - **Recording state** is guessed from those frames. The first frame shows the
   overlay; 300 ms of silence on the socket hides it. Nothing polls
   `voxtype status` and no subprocesses get spawned.
+- **Stopping** in streaming mode is spotted early. voxtype keeps the socket
+  busy while it finishes typing, with a silence pump: frames of exact zeros
+  whose sequence number starts over at 0. The overlay hides on the first of
+  those. A muted mic is silent too, but its sequence keeps counting, so it
+  doesn't trip this.
 - **Reconnecting** happens every 2 seconds while the daemon is down or
   restarting.
 - **Drawing** turns every two frames into one bar, so 20 ms per bar. Heights go
@@ -61,7 +67,8 @@ straight through to whatever is underneath.
   appears. It reads ten pixels where it's about to draw, with
   `Shell.Screenshot.pick_color`, and averages their brightness. If that lands
   in the grey middle, or the samples disagree wildly (half a white window, half
-  a dark one), it goes with your system colour scheme. The pixels are only
+  a dark one), it goes with your system colour scheme. Same if sampling takes
+  longer than 200 ms or fails; the overlay never waits on it for longer. The pixels are only
   turned into a brightness number; nothing is stored or sent anywhere.
 
 ## Development
@@ -101,6 +108,7 @@ client reconnects and shuts down cleanly.
 | `lib/frames.js` | shared | Frame decoder |
 | `lib/wave.js` | shared | Bar heights and edge fade |
 | `lib/contrast.js` | shared | Light/dark decision from brightness samples |
+| `lib/stopDetector.js` | shared | Spots voxtype's post-stop silence pump |
 | `tests/` | — | Headless gjs checks |
 
 Nothing in `lib/` may import `St`, `Clutter`, `Gtk`, `Gdk` or `Adw`. That's
@@ -121,9 +129,12 @@ anything done.
 - It only appears on the primary monitor.
 - There are no preferences. Size, position and colours are constants in
   `shell/waveOverlay.js`.
-- Recording and transcribing look the same from here. The overlay fades out the
-  moment voxtype stops sending audio levels, which can be a little before the
-  text appears.
+- The stop is only seen once voxtype handles it. voxtype doesn't react to the
+  hotkey while it's busy typing a partial result, so the overlay can linger for
+  a moment after you press it.
+- Early hiding relies on voxtype's silence pump, which is an implementation
+  detail, not a documented protocol. In batch (non-streaming) mode there is no
+  pump; the overlay simply hides when the frames stop.
 
 ## License
 

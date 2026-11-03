@@ -14,6 +14,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {Mode} from '../lib/contrast.js';
+import {StopDetector} from '../lib/stopDetector.js';
 import {BarAccumulator, edgeFade} from '../lib/wave.js';
 import {detectMode, systemMode} from './backgroundMode.js';
 
@@ -52,6 +53,7 @@ class WaveOverlay extends St.DrawingArea {
             visible: false,
         });
         this._bars = new BarAccumulator({framesPerBar: FRAMES_PER_BAR, gain: GAIN, capacity: MAX_BARS});
+        this._stopDetector = new StopDetector();
         this._lastFrameTime = 0;
         this._tickId = 0;
         this._mode = systemMode();
@@ -69,9 +71,18 @@ class WaveOverlay extends St.DrawingArea {
     }
 
     addFrames(frames) {
-        for (const frame of frames)
-            this._bars.add(frame);
+        if (!this._tickId)
+            this._stopDetector.reset();
+        const wasStopping = this._stopDetector.stopping;
+        for (const frame of frames) {
+            if (!this._stopDetector.push(frame))
+                this._bars.add(frame);
+        }
         this._lastFrameTime = GLib.get_monotonic_time();
+
+        /* Recording is over; the drain frames only keep the tick alive until voxtype goes idle. */
+        if (this._stopDetector.stopping && !wasStopping)
+            this._fadeOut();
 
         if (this._tickId)
             return;
@@ -93,7 +104,7 @@ class WaveOverlay extends St.DrawingArea {
         this._bars.clear();
         this._mode = await detectMode(this.x, this.y, WIDTH, HEIGHT);
         /* The recording may have ended, or the extension been disabled, while sampling. */
-        if (!this._tickId)
+        if (!this._tickId || this._stopDetector.stopping)
             return;
         this.show();
         this.ease({opacity: 255, duration: FADE_IN_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
@@ -131,6 +142,7 @@ class WaveOverlay extends St.DrawingArea {
 
         const waveStart = PADDING + DOT_GAP;
         const waveEnd = width - PADDING;
+
         const step = BAR_WIDTH + BAR_GAP;
         const visibleBars = this._bars.bars.slice(-Math.floor((waveEnd - waveStart) / step));
         const firstX = waveEnd - visibleBars.length * step;
