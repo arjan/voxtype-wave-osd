@@ -3,6 +3,8 @@
 A GNOME Shell extension that shows a small floating microphone waveform while
 [voxtype][voxtype] is recording, similar to the dictation overlay in Wispr Flow.
 
+![The waveform floating near the bottom of the screen while dictating](screenshot.png)
+
 voxtype ships its own on-screen visualizer (`voxtype-osd`), but it needs the
 Wayland layer-shell protocol, which GNOME does not implement. On GNOME only the
 shell itself can draw above other windows, hence an extension.
