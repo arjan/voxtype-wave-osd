@@ -1,0 +1,4 @@
+node_modules/
+
+# Output of `make pack`
+*.shell-extension.zip

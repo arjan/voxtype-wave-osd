@@ -1,0 +1,17 @@
+{
+  "name": "voxtype-wave-osd",
+  "version": "1.0.0",
+  "description": "GNOME Shell extension showing a floating waveform while voxtype records",
+  "license": "GPL-2.0-or-later",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "test": "gjs -m tests/smoke.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
+    "globals": "^17.11.0"
+  }
+}
