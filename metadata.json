@@ -1,0 +1,9 @@
+{
+  "name": "Voxtype Wave OSD",
+  "description": "Floating microphone waveform while voxtype is recording",
+  "uuid": "voxtype-wave-osd@github.com",
+  "url": "https://github.com/arjan/voxtype-wave-osd",
+  "shell-version": [
+    "50"
+  ]
+}
